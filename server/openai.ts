@@ -73,7 +73,11 @@ Provide a JSON response with:
       response_format: { type: "json_object" },
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('No content received from OpenAI API');
+    }
+    const result = JSON.parse(content);
     return {
       suggestedPrice: Math.max(10, result.suggestedPrice),
       priceRange: {
@@ -84,7 +88,8 @@ Provide a JSON response with:
       marketFactors: result.marketFactors
     };
   } catch (error) {
-    throw new Error("Failed to generate pricing suggestion: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error("Failed to generate pricing suggestion: " + errorMessage);
   }
 }
 
@@ -132,9 +137,14 @@ Provide JSON response with:
       response_format: { type: "json_object" },
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('No content received from OpenAI API');
+    }
+    return JSON.parse(content);
   } catch (error) {
-    throw new Error("Failed to generate marketing content: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error("Failed to generate marketing content: " + errorMessage);
   }
 }
 
@@ -182,9 +192,14 @@ Provide JSON response with:
       response_format: { type: "json_object" },
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('No content received from OpenAI API');
+    }
+    return JSON.parse(content);
   } catch (error) {
-    throw new Error("Failed to enhance artisan story: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error("Failed to enhance artisan story: " + errorMessage);
   }
 }
 
@@ -230,8 +245,13 @@ export async function analyzeProductImage(base64Image: string): Promise<{
       max_completion_tokens: 2048,
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('No content received from OpenAI API');
+    }
+    return JSON.parse(content);
   } catch (error) {
-    throw new Error("Failed to analyze product image: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error("Failed to analyze product image: " + errorMessage);
   }
 }
