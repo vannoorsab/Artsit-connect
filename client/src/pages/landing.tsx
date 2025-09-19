@@ -5,9 +5,10 @@ import Footer from "@/components/footer";
 import { useQuery } from "@tanstack/react-query";
 import ProductCard from "@/components/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { type Product } from "@shared/schema";
 
 export default function Landing() {
-  const { data: featuredProducts, isLoading: productsLoading } = useQuery({
+  const { data: featuredProducts, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
 

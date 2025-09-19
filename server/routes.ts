@@ -36,7 +36,7 @@ const upload = multer({
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed'), false);
+      cb(null, false);
     }
   },
   limits: {
@@ -358,6 +358,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Artisan stats
   app.get('/api/artisan/:id/stats', async (req, res) => {
+    try {
+      const stats = await storage.getArtisanStats(req.params.id);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching artisan stats:", error);
+      res.status(500).json({ message: "Failed to fetch artisan stats" });
+    }
+  });
+
+  // Alternative endpoint for frontend query pattern
+  app.get('/api/artisans/:id/stats', async (req, res) => {
     try {
       const stats = await storage.getArtisanStats(req.params.id);
       res.json(stats);

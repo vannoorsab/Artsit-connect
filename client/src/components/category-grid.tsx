@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Palette, Scissors, Shirt, Gem } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { type Category } from "@shared/schema";
 
 const categoryIcons = {
   pottery: Palette,
@@ -10,7 +11,7 @@ const categoryIcons = {
 };
 
 export default function CategoryGrid() {
-  const { data: categories, isLoading } = useQuery({
+  const { data: categories, isLoading } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 

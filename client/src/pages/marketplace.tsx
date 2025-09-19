@@ -7,21 +7,22 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { type Product, type Category } from "@shared/schema";
 
 export default function Marketplace() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
-  const { data: categories } = useQuery({
+  const { data: categories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
-  const { data: products, isLoading } = useQuery({
+  const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", { search: search || undefined, categoryId: categoryFilter || undefined }],
   });
 
-  const { data: favorites } = useQuery({
+  const { data: favorites } = useQuery<Product[]>({
     queryKey: ["/api/favorites"],
   });
 
@@ -35,7 +36,8 @@ export default function Marketplace() {
       case "price-high":
         return parseFloat(b.price) - parseFloat(a.price);
       case "popular":
-        return (b._count?.reviews || 0) - (a._count?.reviews || 0);
+        // Fallback to newest since review counts aren't available
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
       case "newest":
       default:
         return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();

@@ -9,27 +9,35 @@ import ProductCard from "@/components/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { Plus, TrendingUp, Heart, MessageSquare } from "lucide-react";
+import { type Product, type Inquiry } from "@shared/schema";
+
+type ArtisanStats = {
+  totalProducts: number;
+  totalInquiries: number;
+  averageRating: number;
+  totalReviews: number;
+};
 
 export default function Home() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { toast } = useToast();
 
-  const { data: userProducts, isLoading: productsLoading } = useQuery({
+  const { data: userProducts, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", { artisanId: user?.id }],
     enabled: !!user?.id,
   });
 
-  const { data: favorites, isLoading: favoritesLoading } = useQuery({
+  const { data: favorites, isLoading: favoritesLoading } = useQuery<Product[]>({
     queryKey: ["/api/favorites"],
     enabled: !!user?.id,
   });
 
-  const { data: inquiries, isLoading: inquiriesLoading } = useQuery({
+  const { data: inquiries, isLoading: inquiriesLoading } = useQuery<Inquiry[]>({
     queryKey: ["/api/inquiries"],
     enabled: !!user?.id,
   });
 
-  const { data: stats } = useQuery({
+  const { data: stats } = useQuery<ArtisanStats>({
     queryKey: ["/api/artisan", user?.id, "stats"],
     enabled: !!user?.id,
   });
