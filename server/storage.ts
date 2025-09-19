@@ -94,23 +94,23 @@ export class DatabaseStorage implements IStorage {
 
   // Product operations
   async getProducts(filters?: { categoryId?: string; search?: string; artisanId?: string }): Promise<Product[]> {
-    let query = db.select().from(products).where(eq(products.isActive, true));
+    const conditions = [eq(products.isActive, true)];
     
     if (filters?.categoryId) {
-      query = query.where(eq(products.categoryId, filters.categoryId));
+      conditions.push(eq(products.categoryId, filters.categoryId));
     }
     
     if (filters?.search) {
-      query = query.where(
-        ilike(products.title, `%${filters.search}%`)
-      );
+      conditions.push(ilike(products.title, `%${filters.search}%`));
     }
     
     if (filters?.artisanId) {
-      query = query.where(eq(products.artisanId, filters.artisanId));
+      conditions.push(eq(products.artisanId, filters.artisanId));
     }
     
-    return query.orderBy(desc(products.createdAt));
+    return db.select().from(products)
+      .where(and(...conditions))
+      .orderBy(desc(products.createdAt));
   }
 
   async getProduct(id: string): Promise<Product | undefined> {
