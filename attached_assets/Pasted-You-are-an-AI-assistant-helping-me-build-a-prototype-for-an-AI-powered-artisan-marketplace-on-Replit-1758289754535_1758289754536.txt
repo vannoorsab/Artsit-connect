@@ -1,0 +1,50 @@
+You are an AI assistant helping me build a prototype for an AI-powered artisan marketplace on Replit.
+
+**Goal:**
+Create a full-stack web app where local artisans can:
+1. Register and log in.
+2. Upload product images and descriptions.
+3. Get AI-generated suggestions (pricing, captions, marketing text).
+4. Display their products on a public marketplace page.
+5. Connect with buyers through direct inquiry (later add payments).
+
+**Tech Stack:**
+- Frontend: React.js (Vite or Create React App)
+- Backend: Node.js + Express
+- Database/Storage: Firebase or local JSON (for prototype)
+- AI: OpenAI API (for text generation, marketing captions, storytelling)
+- File upload: Firebase Storage or mock storage in prototype
+
+**Core Features to Build:**
+1. **Authentication** (simple artisan login/signup).
+2. **Product Upload** (image, description, category, price).
+3. **AI Assistant Integration**
+   - Suggest product price
+   - Generate storytelling captions for social media
+   - Suggest SEO-friendly product titles
+4. **Marketplace View**
+   - Public-facing page with artisan products
+   - Search & filter by category
+5. **Community/Story Section** (each artisan can share their story powered by AI writing assistance).
+6. **Basic Admin Panel** (approve artisans/products if needed).
+
+**High-Level Tasks:**
+1. Setup React frontend with product upload form and marketplace display.
+2. Setup Express backend with routes:
+   - /api/auth
+   - /api/products
+   - /api/ai (to call OpenAI for captions/pricing)
+3. Connect frontend to backend using Axios.
+4. Implement AI function that takes product description and returns:
+   - Suggested price
+   - Marketing caption
+   - Short artisan story version
+5. Save products and user data in Firebase (or JSON for MVP).
+6. Deploy on Replit and test with sample artisan workflows.
+
+**Stretch Goals (optional):**
+- Add payment gateway integration (Stripe/Razorpay).
+- Add social media auto-posting.
+- Add analytics dashboard for artisans.
+
+Start by scaffolding the project structure (frontend + backend folders) and initialize a simple React + Express app connected on Replit.
