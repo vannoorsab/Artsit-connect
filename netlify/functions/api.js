@@ -1,13 +1,18 @@
 import express from 'express';
 import serverless from 'serverless-http';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 
 // Import your existing routes
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Demo data - same as your existing server
 const categories = [
@@ -131,21 +136,39 @@ app.get('/auth/user', (req, res) => {
 });
 
 app.post('/auth/login', (req, res) => {
-  res.cookie('auth_token', 'demo-token', { 
-    httpOnly: true, 
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+  const { email, password } = req.body;
+
+  // For demo purposes, accept any email/password combination
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email and password are required'
+    });
+  }
+
+  // Set cookie with proper settings for production
+  res.cookie('auth_token', 'demo-token', {
+    httpOnly: true,
+    secure: true, // Always secure for production
+    sameSite: 'none', // Required for cross-origin cookies
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   });
-  
-  res.json({ 
-    success: true, 
-    user: demoUser 
+
+  res.json({
+    success: true,
+    user: {
+      ...demoUser,
+      email: email // Use the provided email
+    }
   });
 });
 
 app.post('/auth/logout', (req, res) => {
-  res.clearCookie('auth_token');
+  res.clearCookie('auth_token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none'
+  });
   res.json({ success: true });
 });
 
