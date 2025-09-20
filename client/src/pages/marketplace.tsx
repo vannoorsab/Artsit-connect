@@ -14,29 +14,38 @@ export default function Marketplace() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: ["/api/categories"],
+  // Fetch categories
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['/api/categories'],
+    queryFn: async () => {
+      const response = await fetch('/api/categories');
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      return response.json();
+    }
   });
 
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products", { search: search || undefined, categoryId: categoryFilter || undefined }],
-  });
+  // Fetch products
+  const { data: products = [], isLoading } = useQuery<Product[]>({
+    queryKey: ['/api/products', { categoryId: categoryFilter, search }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (categoryFilter && categoryFilter !== 'all') params.append('categoryId', categoryFilter);
+      if (search) params.append('search', search);
 
-  const { data: favorites } = useQuery<Product[]>({
-    queryKey: ["/api/favorites"],
+      const response = await fetch(`/api/products?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch products');
+      return response.json();
+    }
   });
-
-  const favoriteProductIds = new Set(favorites?.map(p => p.id) || []);
 
   // Sort products based on sortBy
   const sortedProducts = products ? [...products].sort((a, b) => {
     switch (sortBy) {
       case "price-low":
-        return parseFloat(a.price) - parseFloat(b.price);
+        return Number(a.price) - Number(b.price);
       case "price-high":
-        return parseFloat(b.price) - parseFloat(a.price);
+        return Number(b.price) - Number(a.price);
       case "popular":
-        // Fallback to newest since review counts aren't available
         return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
       case "newest":
       default:
@@ -47,6 +56,7 @@ export default function Marketplace() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
+      <div className="pt-16"> {/* Add padding for fixed header */}
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -74,8 +84,8 @@ export default function Marketplace() {
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Categories</SelectItem>
-                {categories?.map((category) => (
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.name}
                   </SelectItem>
@@ -125,7 +135,6 @@ export default function Marketplace() {
               <ProductCard
                 key={product.id}
                 product={product}
-                isFavorited={favoriteProductIds.has(product.id)}
               />
             ))
           ) : (
@@ -157,7 +166,8 @@ export default function Marketplace() {
         </div>
       </div>
       
-      <Footer />
+        <Footer />
+      </div>
     </div>
   );
 }

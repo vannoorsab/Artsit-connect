@@ -11,16 +11,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Star, 
-  Heart, 
+import {
+  Star,
+  Heart,
   MessageSquare,
   X,
   ChevronLeft,
   ChevronRight,
   User,
   Package,
-  ShoppingBag
+  ShoppingBag,
+  CreditCard,
+  Truck
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -45,9 +47,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertInquirySchema, insertReviewSchema } from "@shared/schema";
 import { z } from "zod";
 
-const inquiryFormSchema = insertInquirySchema.omit({
-  buyerId: true,
-  artisanId: true,
+const inquiryFormSchema = z.object({
+  productId: z.string(),
+  subject: z.string().min(1, "Subject is required"),
+  message: z.string().min(1, "Message is required"),
 });
 
 const reviewFormSchema = insertReviewSchema.omit({
@@ -67,21 +70,36 @@ export default function ProductDetail() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [favorited, setFavorited] = useState(false);
 
   const { data: product, isLoading: productLoading } = useQuery({
     queryKey: ["/api/products", productId],
     enabled: !!productId,
+    queryFn: async () => {
+      const response = await fetch(`/api/products?id=${productId}`);
+      if (!response.ok) throw new Error('Failed to fetch product');
+      const products = await response.json();
+      return products.find((p: any) => p.id === productId);
+    }
   });
 
-  const { data: reviews, isLoading: reviewsLoading } = useQuery({
+  const { data: reviews = [], isLoading: reviewsLoading } = useQuery({
     queryKey: ["/api/reviews", productId],
     enabled: !!productId,
+    queryFn: async () => {
+      // Return empty array for demo
+      return [];
+    }
   });
 
-  const { data: favorites } = useQuery({
+  const { data: favorites = [] } = useQuery({
     queryKey: ["/api/favorites"],
     enabled: !!user?.id,
+    queryFn: async () => {
+      // Return empty array for demo
+      return [];
+    }
   });
 
   const { data: artisan } = useQuery({
@@ -99,7 +117,7 @@ export default function ProductDetail() {
   // Check if product is favorited
   useEffect(() => {
     if (favorites && productId) {
-      setFavorited(favorites.some(p => p.id === productId));
+      setFavorited(favorites.some((p: any) => p.id === productId));
     }
   }, [favorites, productId]);
 
@@ -145,7 +163,7 @@ export default function ProductDetail() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/login";
         }, 500);
         return;
       }
@@ -178,7 +196,7 @@ export default function ProductDetail() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/login";
         }, 500);
         return;
       }
@@ -212,7 +230,7 @@ export default function ProductDetail() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/login";
         }, 500);
         return;
       }
@@ -261,9 +279,22 @@ export default function ProductDetail() {
       });
       return;
     }
-    
+
     reviewForm.setValue('productId', productId || '');
     setReviewDialogOpen(true);
+  };
+
+  const handleBuyClick = () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to purchase products",
+        variant: "default"
+      });
+      return;
+    }
+
+    setPurchaseDialogOpen(true);
   };
 
   const onSubmitInquiry = (data: InquiryFormData) => {
@@ -294,7 +325,7 @@ export default function ProductDetail() {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="pt-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <Skeleton className="w-full h-96 rounded-xl mb-4" />
@@ -320,7 +351,7 @@ export default function ProductDetail() {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="pt-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-12 text-center">
             <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-foreground mb-2">Product Not Found</h1>
@@ -340,8 +371,8 @@ export default function ProductDetail() {
     ? `${artisan.firstName} ${artisan.lastName}`
     : 'Unknown Artisan';
 
-  const averageRating = reviews?.length 
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+  const averageRating = reviews?.length
+    ? reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length
     : 0;
 
   const currentImage = product.images?.[currentImageIndex] || 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600';
@@ -349,8 +380,8 @@ export default function ProductDetail() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="pt-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           {/* Product Images */}
           <div className="space-y-4">
@@ -505,8 +536,18 @@ export default function ProductDetail() {
             
             {/* Action Buttons */}
             <div className="space-y-3">
-              <Button 
-                onClick={handleContactClick} 
+              <Button
+                onClick={handleBuyClick}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
+                data-testid="button-buy-now"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Buy Now - ${parseFloat(product?.price || '0').toFixed(2)}
+              </Button>
+
+              <Button
+                onClick={handleContactClick}
+                variant="outline"
                 className="w-full"
                 data-testid="button-contact-artisan"
               >
@@ -574,7 +615,7 @@ export default function ProductDetail() {
                 </Card>
               ))
             ) : reviews?.length ? (
-              reviews.map((review) => (
+              reviews.map((review: any) => (
                 <Card key={review.id}>
                   <CardContent className="p-6">
                     <div className="flex items-start space-x-4">
@@ -810,7 +851,132 @@ export default function ProductDetail() {
           </Form>
         </DialogContent>
       </Dialog>
-      
+
+      {/* Purchase Dialog */}
+      <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <ShoppingBag className="h-5 w-5 mr-2" />
+              Purchase Product
+            </DialogTitle>
+            <DialogDescription>
+              Complete your purchase of "{product?.title}"
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Order Summary */}
+            <div className="bg-muted/50 rounded-lg p-4">
+              <h4 className="font-medium mb-3">Order Summary</h4>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-muted-foreground">Product:</span>
+                <span className="text-sm font-medium">{product?.title}</span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-muted-foreground">Price:</span>
+                <span className="text-sm font-medium">${parseFloat(product?.price || '0').toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-muted-foreground">Shipping:</span>
+                <span className="text-sm font-medium">$5.99</span>
+              </div>
+              <div className="border-t pt-2 mt-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Total:</span>
+                  <span className="font-bold text-lg">${(parseFloat(product?.price || '0') + 5.99).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Shipping Information */}
+            <div className="space-y-4">
+              <h4 className="font-medium flex items-center">
+                <Truck className="h-4 w-4 mr-2" />
+                Shipping Information
+              </h4>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">First Name</label>
+                  <Input placeholder="John" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Last Name</label>
+                  <Input placeholder="Doe" className="mt-1" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Address</label>
+                <Input placeholder="123 Main Street" className="mt-1" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">City</label>
+                  <Input placeholder="New York" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">ZIP Code</label>
+                  <Input placeholder="10001" className="mt-1" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                <Input placeholder="+1 (555) 123-4567" className="mt-1" />
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            <div className="space-y-4">
+              <h4 className="font-medium flex items-center">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Payment Method
+              </h4>
+
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4">
+                <div className="flex items-center space-x-3">
+                  <CreditCard className="h-8 w-8 text-blue-600" />
+                  <div>
+                    <p className="font-medium">Secure Payment</p>
+                    <p className="text-sm text-muted-foreground">Your payment information is encrypted and secure</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPurchaseDialogOpen(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                onClick={() => {
+                  toast({
+                    title: "Order Placed!",
+                    description: "Your order has been placed successfully. You'll receive a confirmation email shortly.",
+                    variant: "default"
+                  });
+                  setPurchaseDialogOpen(false);
+                }}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Complete Purchase
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );

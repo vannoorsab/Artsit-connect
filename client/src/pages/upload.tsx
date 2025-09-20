@@ -22,12 +22,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CloudUpload, Wand2, DollarSign, Tag, Megaphone, Heart, Loader2 } from "lucide-react";
+import { CloudUpload, Wand2, DollarSign, Tag, Megaphone, Heart, Loader2, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 
+
 const productFormSchema = insertProductSchema.extend({
   images: z.array(z.instanceof(File)).min(1, "At least one image is required"),
+  price: z.string().min(1, "Price is required"),
 }).omit({
   artisanId: true,
 });
@@ -43,8 +45,13 @@ export default function Upload() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [aiSuggestions, setAiSuggestions] = useState<any>(null);
 
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const response = await fetch('/api/categories');
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      return response.json();
+    }
   });
 
   const form = useForm<ProductFormData>({
@@ -69,7 +76,7 @@ export default function Upload() {
     },
     onSuccess: (data) => {
       form.setValue('price', data.suggestedPrice.toString());
-      setAiSuggestions(prev => ({ ...prev, pricing: data }));
+      setAiSuggestions((prev: any) => ({ ...prev, pricing: data }));
       toast({
         title: "AI Pricing Suggestion",
         description: `Suggested price: $${data.suggestedPrice}`,
@@ -103,7 +110,7 @@ export default function Upload() {
       return response.json();
     },
     onSuccess: (data) => {
-      setAiSuggestions(prev => ({ ...prev, marketing: data }));
+      setAiSuggestions((prev: any) => ({ ...prev, marketing: data }));
       toast({
         title: "AI Marketing Content Generated",
         description: "SEO title, social caption, and story version ready!",
@@ -239,7 +246,7 @@ export default function Upload() {
 
   const handleAIPricing = () => {
     const formData = form.getValues();
-    const category = categories?.find(c => c.id === formData.categoryId);
+    const category = categories?.find((c: any) => c.id === formData.categoryId);
     
     if (!formData.title || !formData.description || !category) {
       toast({
@@ -260,7 +267,7 @@ export default function Upload() {
 
   const handleAIMarketing = () => {
     const formData = form.getValues();
-    const category = categories?.find(c => c.id === formData.categoryId);
+    const category = categories?.find((c: any) => c.id === formData.categoryId);
     
     if (!formData.title || !formData.description || !category) {
       toast({
@@ -313,12 +320,14 @@ export default function Upload() {
     }
 
     // Add image files
-    imageFiles.forEach((file, index) => {
+    imageFiles.forEach((file) => {
       formData.append('images', file);
     });
 
     createProductMutation.mutate(formData);
   };
+
+
 
   if (isLoading) {
     return (
@@ -432,7 +441,7 @@ export default function Upload() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {categories?.map((category) => (
+                            {categories?.map((category: any) => (
                               <SelectItem key={category.id} value={category.id}>
                                 {category.name}
                               </SelectItem>
@@ -683,3 +692,5 @@ export default function Upload() {
     </div>
   );
 }
+
+

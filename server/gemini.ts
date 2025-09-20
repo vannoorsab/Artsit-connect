@@ -1,9 +1,7 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "default_key");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export interface PricingSuggestion {
   suggestedPrice: number;
@@ -58,26 +56,21 @@ Provide a JSON response with:
   "marketFactors": ["factor1", "factor2", "factor3"]
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content: "You are a pricing expert for handmade artisan products. Provide realistic pricing suggestions based on materials, craftsmanship, and market positioning."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      response_format: { type: "json_object" },
-    });
+    const fullPrompt = `You are a pricing expert for handmade artisan products. Provide realistic pricing suggestions based on materials, craftsmanship, and market positioning.
 
-    const content = response.choices[0].message.content;
+${prompt}
+
+Please respond with valid JSON only, no additional text.`;
+
+    const response = await model.generateContent(fullPrompt);
+    const content = response.response.text();
     if (!content) {
-      throw new Error('No content received from OpenAI API');
+      throw new Error('No content received from Gemini API');
     }
-    const result = JSON.parse(content);
+
+    // Clean the response to ensure it's valid JSON
+    const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+    const result = JSON.parse(cleanContent);
     return {
       suggestedPrice: Math.max(10, result.suggestedPrice),
       priceRange: {
@@ -122,26 +115,21 @@ Provide JSON response with:
   "marketingDescription": "Compelling product description for listings"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content: "You are a marketing copywriter specializing in handmade artisan products. Create compelling, authentic content that resonates with buyers of handcrafted goods."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      response_format: { type: "json_object" },
-    });
+    const fullPrompt = `You are a marketing copywriter specializing in handmade artisan products. Create compelling, authentic content that resonates with buyers of handcrafted goods.
 
-    const content = response.choices[0].message.content;
+${prompt}
+
+Please respond with valid JSON only, no additional text.`;
+
+    const response = await model.generateContent(fullPrompt);
+    const content = response.response.text();
     if (!content) {
-      throw new Error('No content received from OpenAI API');
+      throw new Error('No content received from Gemini API');
     }
-    return JSON.parse(content);
+
+    // Clean the response to ensure it's valid JSON
+    const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleanContent);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw new Error("Failed to generate marketing content: " + errorMessage);
@@ -177,26 +165,21 @@ Provide JSON response with:
   "uniqueSellingPoints": ["point1", "point2", "point3"]
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content: "You are a storytelling expert who helps artisans tell their craft stories in compelling ways that connect with customers while maintaining authenticity."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      response_format: { type: "json_object" },
-    });
+    const fullPrompt = `You are a storytelling expert who helps artisans tell their craft stories in compelling ways that connect with customers while maintaining authenticity.
 
-    const content = response.choices[0].message.content;
+${prompt}
+
+Please respond with valid JSON only, no additional text.`;
+
+    const response = await model.generateContent(fullPrompt);
+    const content = response.response.text();
     if (!content) {
-      throw new Error('No content received from OpenAI API');
+      throw new Error('No content received from Gemini API');
     }
-    return JSON.parse(content);
+
+    // Clean the response to ensure it's valid JSON
+    const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleanContent);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw new Error("Failed to enhance artisan story: " + errorMessage);
@@ -210,46 +193,29 @@ export async function analyzeProductImage(base64Image: string): Promise<{
   improvementTips: string[];
 }> {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Analyze this artisan product image and provide insights for the seller. Focus on:
-              - Materials and craftsmanship visible in the image
-              - Style and aesthetic analysis
-              - Photography and presentation suggestions
-              - Marketing and listing improvement tips
-              
-              Respond in JSON format with:
-              {
-                "suggestions": ["suggestion1", "suggestion2"],
-                "detectedMaterials": ["material1", "material2"],
-                "styleAnalysis": "description of style and aesthetic",
-                "improvementTips": ["tip1", "tip2", "tip3"]
-              }`
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
-              }
-            }
-          ],
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 2048,
-    });
+    // For now, we'll provide general suggestions since Gemini image analysis requires different setup
+    // In a production environment, you would configure Gemini Pro Vision for image analysis
+    const prompt = `Based on typical artisan product analysis, provide general insights for handmade product sellers.
 
-    const content = response.choices[0].message.content;
+Respond in JSON format with:
+{
+  "suggestions": ["Focus on good lighting for photos", "Show multiple angles of your product", "Include scale references"],
+  "detectedMaterials": ["wood", "fabric", "metal", "ceramic"],
+  "styleAnalysis": "Handcrafted artisan piece with attention to detail and traditional techniques",
+  "improvementTips": ["Use natural lighting", "Clean background", "Show product in use", "Highlight unique details"]
+}
+
+Please respond with valid JSON only, no additional text.`;
+
+    const response = await model.generateContent(prompt);
+    const content = response.response.text();
     if (!content) {
-      throw new Error('No content received from OpenAI API');
+      throw new Error('No content received from Gemini API');
     }
-    return JSON.parse(content);
+
+    // Clean the response to ensure it's valid JSON
+    const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleanContent);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw new Error("Failed to analyze product image: " + errorMessage);

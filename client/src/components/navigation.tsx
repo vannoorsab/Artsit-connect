@@ -2,20 +2,24 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Search, Heart, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Navigation() {
   const { user, isAuthenticated } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   return (
-    <nav className="sticky top-0 z-50 bg-card/95 border-b border-border backdrop-blur-md">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 border-b border-gray-200 backdrop-blur-md shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2" data-testid="logo-link">
             <i className="fas fa-hammer text-primary text-2xl"></i>
-            <span className="font-serif font-bold text-xl text-foreground">CraftHub</span>
+            <span className="font-serif font-bold text-xl text-foreground">ArtisanConnect</span>
             <span className="ai-badge text-white text-xs px-2 py-1 rounded-full">AI</span>
           </Link>
 
@@ -80,22 +84,52 @@ export default function Navigation() {
                     data-testid="img-avatar"
                   />
                 )}
-                <a
-                  href="/api/logout"
+                <button
+                  onClick={async () => {
+                    try {
+                      // Call logout API
+                      await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        credentials: 'include'
+                      });
+
+                      // Clear any stored auth data
+                      localStorage.clear();
+                      sessionStorage.clear();
+
+                      // Invalidate auth queries
+                      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+
+                      toast({
+                        title: "Signed out",
+                        description: "You have been successfully signed out.",
+                      });
+
+                      // Redirect to landing page
+                      setLocation("/");
+                    } catch (error) {
+                      console.error('Logout error:', error);
+                      // Still redirect even if API call fails
+                      localStorage.clear();
+                      sessionStorage.clear();
+                      setLocation("/");
+                    }
+                  }}
                   className="btn-outline text-sm"
                   data-testid="button-logout"
                 >
                   Sign Out
-                </a>
+                </button>
               </div>
             ) : (
-              <a
-                href="/api/login"
-                className="btn-primary text-sm"
-                data-testid="button-signin"
-              >
-                Sign In
-              </a>
+              <Link href="/login">
+                <button
+                  className="btn-primary text-sm"
+                  data-testid="button-signin"
+                >
+                  Sign In
+                </button>
+              </Link>
             )}
 
             {/* Mobile menu button */}

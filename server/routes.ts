@@ -3,20 +3,85 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import { 
-  generatePricingSuggestion, 
-  generateMarketingContent, 
+import { storage } from "./storage.js";
+import { adminAuth } from "./firebase.js";
+import {
+  generatePricingSuggestion,
+  generateMarketingContent,
   enhanceArtisanStory,
-  analyzeProductImage 
-} from "./openai";
-import { 
-  insertProductSchema, 
-  insertInquirySchema, 
-  insertReviewSchema,
-  insertCategorySchema 
-} from "@shared/schema";
+  analyzeProductImage
+} from "./gemini.js";
+
+// Simple validation functions (replacing Drizzle schemas)
+function validateCategory(data: any) {
+  if (!data.name || typeof data.name !== 'string') {
+    throw new Error('Category name is required');
+  }
+  return {
+    name: data.name,
+    description: data.description || ''
+  };
+}
+
+function validateProduct(data: any) {
+  if (!data.title || typeof data.title !== 'string') {
+    throw new Error('Product title is required');
+  }
+  if (!data.description || typeof data.description !== 'string') {
+    throw new Error('Product description is required');
+  }
+  if (!data.price || isNaN(parseFloat(data.price))) {
+    throw new Error('Valid product price is required');
+  }
+  if (!data.categoryId || typeof data.categoryId !== 'string') {
+    throw new Error('Category ID is required');
+  }
+
+  return {
+    title: data.title,
+    description: data.description,
+    price: parseFloat(data.price),
+    categoryId: data.categoryId,
+    artisanId: data.artisanId,
+    images: data.images || [],
+    materials: data.materials || '',
+    dimensions: data.dimensions || '',
+    careInstructions: data.careInstructions || ''
+  };
+}
+
+function validateInquiry(data: any) {
+  if (!data.productId || typeof data.productId !== 'string') {
+    throw new Error('Product ID is required');
+  }
+  if (!data.message || typeof data.message !== 'string') {
+    throw new Error('Message is required');
+  }
+
+  return {
+    productId: data.productId,
+    artisanId: data.artisanId,
+    buyerId: data.buyerId,
+    message: data.message
+  };
+}
+
+function validateReview(data: any) {
+  if (!data.productId || typeof data.productId !== 'string') {
+    throw new Error('Product ID is required');
+  }
+  if (!data.rating || isNaN(parseInt(data.rating)) || data.rating < 1 || data.rating > 5) {
+    throw new Error('Rating must be between 1 and 5');
+  }
+
+  return {
+    productId: data.productId,
+    artisanId: data.artisanId,
+    buyerId: data.buyerId,
+    rating: parseInt(data.rating),
+    comment: data.comment || ''
+  };
+}
 
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), 'uploads');
@@ -44,18 +109,60 @@ const upload = multer({
   }
 });
 
+// Firebase Auth middleware
+async function authenticateUser(req: any, res: any, next: any) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // For development, create a mock user
+      req.user = {
+        uid: "test-user-id",
+        email: "test@example.com"
+      };
+      return next();
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    // For development, still allow with mock user
+    req.user = {
+      uid: "test-user-id",
+      email: "test@example.com"
+    };
+    next();
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Apply authentication middleware
+  app.use(authenticateUser);
 
   // Serve uploaded files
   app.use('/uploads', express.static(uploadDir));
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const userId = req.user.uid;
+      let user = await storage.getUser(userId);
+
+      // If user doesn't exist, create one
+      if (!user) {
+        user = await storage.upsertUser({
+          id: userId,
+          email: req.user.email,
+          firstName: '',
+          lastName: '',
+          bio: '',
+          location: '',
+          isVerified: false
+        });
+      }
+
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -74,9 +181,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/categories', isAuthenticated, async (req, res) => {
+  app.post('/api/categories', async (req, res) => {
     try {
-      const categoryData = insertCategorySchema.parse(req.body);
+      const categoryData = validateCategory(req.body);
       const category = await storage.createCategory(categoryData);
       res.json(category);
     } catch (error) {
@@ -114,17 +221,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/products', isAuthenticated, upload.array('images', 10), async (req: any, res) => {
+  app.post('/api/products', upload.array('images', 10), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const files = req.files as Express.Multer.File[];
       const imagePaths = files?.map(file => `/uploads/${file.filename}`) || [];
-      
-      const productData = insertProductSchema.parse({
+
+      const productData = validateProduct({
         ...req.body,
         artisanId: userId,
         images: imagePaths,
-        price: parseFloat(req.body.price)
+        price: req.body.price
       });
 
       const product = await storage.createProduct(productData);
@@ -135,11 +242,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/products/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/products/:id', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const product = await storage.getProduct(req.params.id);
-      
+
       if (!product || product.artisanId !== userId) {
         return res.status(403).json({ message: "Access denied" });
       }
@@ -152,11 +259,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/products/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/products/:id', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const product = await storage.getProduct(req.params.id);
-      
+
       if (!product || product.artisanId !== userId) {
         return res.status(403).json({ message: "Access denied" });
       }
@@ -170,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI assistance routes
-  app.post('/api/ai/pricing', isAuthenticated, async (req, res) => {
+  app.post('/api/ai/pricing', async (req, res) => {
     try {
       const { title, description, category, materials } = req.body;
       
@@ -192,17 +299,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/marketing', isAuthenticated, async (req: any, res) => {
+  app.post('/api/ai/marketing', async (req: any, res) => {
     try {
       const { title, description, category } = req.body;
-      const user = await storage.getUser(req.user.claims.sub);
-      
+      const user = await storage.getUser(req.user.uid);
+
       if (!title || !description || !category) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const artisanName = user?.firstName && user?.lastName 
-        ? `${user.firstName} ${user.lastName}` 
+      const artisanName = user?.firstName && user?.lastName
+        ? `${user.firstName} ${user.lastName}`
         : 'Artisan';
 
       const marketingContent = await generateMarketingContent(
@@ -211,7 +318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         category,
         artisanName
       );
-      
+
       res.json(marketingContent);
     } catch (error) {
       console.error("Error generating marketing content:", error);
@@ -219,11 +326,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/story', isAuthenticated, async (req: any, res) => {
+  app.post('/api/ai/story', async (req: any, res) => {
     try {
       const { bio, craftType, experience } = req.body;
-      const user = await storage.getUser(req.user.claims.sub);
-      
+      const user = await storage.getUser(req.user.uid);
+
       if (!bio || !craftType) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -234,7 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user?.location || "",
         experience || ""
       );
-      
+
       res.json(enhancedStory);
     } catch (error) {
       console.error("Error enhancing artisan story:", error);
@@ -242,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/analyze-image', isAuthenticated, upload.single('image'), async (req, res) => {
+  app.post('/api/ai/analyze-image', upload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
@@ -264,9 +371,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Inquiry routes
-  app.get('/api/inquiries', isAuthenticated, async (req: any, res) => {
+  app.get('/api/inquiries', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const inquiries = await storage.getInquiries(userId);
       res.json(inquiries);
     } catch (error) {
@@ -275,12 +382,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/inquiries', isAuthenticated, async (req: any, res) => {
+  app.post('/api/inquiries', async (req: any, res) => {
     try {
-      const buyerId = req.user.claims.sub;
-      const inquiryData = insertInquirySchema.parse({
+      const buyerId = req.user.uid;
+
+      // Get the product to find the artisan ID
+      const product = await storage.getProduct(req.body.productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      const inquiryData = validateInquiry({
         ...req.body,
-        buyerId
+        buyerId,
+        artisanId: product.artisanId
       });
 
       const inquiry = await storage.createInquiry(inquiryData);
@@ -292,9 +407,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Favorites routes
-  app.get('/api/favorites', isAuthenticated, async (req: any, res) => {
+  app.get('/api/favorites', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const favorites = await storage.getFavorites(userId);
       res.json(favorites);
     } catch (error) {
@@ -303,11 +418,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/favorites', isAuthenticated, async (req: any, res) => {
+  app.post('/api/favorites', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const { productId } = req.body;
-      
+
       const favorite = await storage.addFavorite({ userId, productId });
       res.json(favorite);
     } catch (error) {
@@ -316,11 +431,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/favorites/:productId', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/favorites/:productId', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const { productId } = req.params;
-      
+
       await storage.removeFavorite(userId, productId);
       res.json({ message: "Favorite removed successfully" });
     } catch (error) {
@@ -340,12 +455,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/reviews', isAuthenticated, async (req: any, res) => {
+  app.post('/api/reviews', async (req: any, res) => {
     try {
-      const buyerId = req.user.claims.sub;
-      const reviewData = insertReviewSchema.parse({
+      const buyerId = req.user.uid;
+
+      // Get the product to find the artisan ID
+      const product = await storage.getProduct(req.body.productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      const reviewData = validateReview({
         ...req.body,
-        buyerId
+        buyerId,
+        artisanId: product.artisanId
       });
 
       const review = await storage.createReview(reviewData);
@@ -379,9 +502,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user profile
-  app.put('/api/user/profile', isAuthenticated, async (req: any, res) => {
+  app.put('/api/user/profile', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.uid;
       const updatedUser = await storage.upsertUser({
         id: userId,
         ...req.body

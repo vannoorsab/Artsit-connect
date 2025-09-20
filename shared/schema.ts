@@ -1,207 +1,147 @@
-import { sql } from 'drizzle-orm';
-import {
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  varchar,
-  integer,
-  decimal,
-  boolean,
-} from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
+// Firebase-compatible type definitions and validation schemas
 
-// User storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
-  bio: text("bio"),
-  location: varchar("location"),
-  isVerified: boolean("is_verified").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+// User types and schemas
+export interface User {
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  bio?: string;
+  location?: string;
+  isVerified?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const userSchema = z.object({
+  id: z.string(),
+  email: z.string().email().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  profileImageUrl: z.string().url().optional(),
+  bio: z.string().optional(),
+  location: z.string().optional(),
+  isVerified: z.boolean().optional(),
 });
 
-export const categories = pgTable("categories", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name").notNull(),
-  slug: varchar("slug").notNull().unique(),
-  description: text("description"),
-  icon: varchar("icon"),
-  createdAt: timestamp("created_at").defaultNow(),
+// Category types and schemas
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: Date;
+}
+
+export const categorySchema = z.object({
+  name: z.string().min(1, "Category name is required"),
+  description: z.string().optional(),
 });
 
-export const products = pgTable("products", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  title: varchar("title").notNull(),
-  description: text("description").notNull(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  categoryId: varchar("category_id").notNull(),
-  artisanId: varchar("artisan_id").notNull(),
-  images: text("images").array(),
-  materials: varchar("materials"),
-  dimensions: varchar("dimensions"),
-  careInstructions: text("care_instructions"),
-  isActive: boolean("is_active").default(true),
-  aiEnhanced: boolean("ai_enhanced").default(false),
-  aiPricingSuggested: boolean("ai_pricing_suggested").default(false),
-  seoTitle: varchar("seo_title"),
-  marketingCaption: text("marketing_caption"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const insertCategorySchema = categorySchema;
+
+// Product types and schemas
+export interface Product {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  categoryId: string;
+  artisanId: string;
+  images: string[];
+  materials?: string;
+  dimensions?: string;
+  careInstructions?: string;
+  isActive: boolean;
+  aiEnhanced?: boolean;
+  aiPricingSuggested?: boolean;
+  seoTitle?: string;
+  marketingCaption?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const productSchema = z.object({
+  title: z.string().min(1, "Product title is required"),
+  description: z.string().min(1, "Product description is required"),
+  price: z.number().positive("Price must be positive"),
+  categoryId: z.string().min(1, "Category is required"),
+  artisanId: z.string().min(1, "Artisan ID is required"),
+  images: z.array(z.string()).default([]),
+  materials: z.string().optional(),
+  dimensions: z.string().optional(),
+  careInstructions: z.string().optional(),
+  aiEnhanced: z.boolean().optional(),
+  aiPricingSuggested: z.boolean().optional(),
+  seoTitle: z.string().optional(),
+  marketingCaption: z.string().optional(),
 });
 
-export const inquiries = pgTable("inquiries", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  productId: varchar("product_id").notNull(),
-  buyerId: varchar("buyer_id").notNull(),
-  artisanId: varchar("artisan_id").notNull(),
-  subject: varchar("subject").notNull(),
-  message: text("message").notNull(),
-  status: varchar("status").default("pending"), // pending, responded, closed
-  createdAt: timestamp("created_at").defaultNow(),
+export const insertProductSchema = productSchema;
+
+// Inquiry types and schemas
+export interface Inquiry {
+  id: string;
+  productId: string;
+  artisanId: string;
+  buyerId: string;
+  message: string;
+  status: 'pending' | 'responded' | 'closed';
+  createdAt: Date;
+}
+
+export const inquirySchema = z.object({
+  productId: z.string().min(1, "Product ID is required"),
+  artisanId: z.string().min(1, "Artisan ID is required"),
+  buyerId: z.string().min(1, "Buyer ID is required"),
+  message: z.string().min(1, "Message is required"),
+  status: z.enum(['pending', 'responded', 'closed']).default('pending'),
 });
 
-export const favorites = pgTable("favorites", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  productId: varchar("product_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
+export const insertInquirySchema = inquirySchema;
+
+// Favorite types and schemas
+export interface Favorite {
+  id: string;
+  userId: string;
+  productId: string;
+  createdAt: Date;
+}
+
+export const favoriteSchema = z.object({
+  userId: z.string().min(1, "User ID is required"),
+  productId: z.string().min(1, "Product ID is required"),
 });
 
-export const reviews = pgTable("reviews", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  productId: varchar("product_id").notNull(),
-  buyerId: varchar("buyer_id").notNull(),
-  artisanId: varchar("artisan_id").notNull(),
-  rating: integer("rating").notNull(), // 1-5 stars
-  comment: text("comment"),
-  createdAt: timestamp("created_at").defaultNow(),
+export const insertFavoriteSchema = favoriteSchema;
+
+// Review types and schemas
+export interface Review {
+  id: string;
+  productId: string;
+  buyerId: string;
+  artisanId: string;
+  rating: number;
+  comment?: string;
+  createdAt: Date;
+}
+
+export const reviewSchema = z.object({
+  productId: z.string().min(1, "Product ID is required"),
+  buyerId: z.string().min(1, "Buyer ID is required"),
+  artisanId: z.string().min(1, "Artisan ID is required"),
+  rating: z.number().int().min(1).max(5, "Rating must be between 1 and 5"),
+  comment: z.string().optional(),
 });
 
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  products: many(products),
-  inquiries: many(inquiries),
-  favorites: many(favorites),
-  reviews: many(reviews),
-}));
+export const insertReviewSchema = reviewSchema;
 
-export const categoriesRelations = relations(categories, ({ many }) => ({
-  products: many(products),
-}));
-
-export const productsRelations = relations(products, ({ one, many }) => ({
-  category: one(categories, {
-    fields: [products.categoryId],
-    references: [categories.id],
-  }),
-  artisan: one(users, {
-    fields: [products.artisanId],
-    references: [users.id],
-  }),
-  inquiries: many(inquiries),
-  favorites: many(favorites),
-  reviews: many(reviews),
-}));
-
-export const inquiriesRelations = relations(inquiries, ({ one }) => ({
-  product: one(products, {
-    fields: [inquiries.productId],
-    references: [products.id],
-  }),
-  buyer: one(users, {
-    fields: [inquiries.buyerId],
-    references: [users.id],
-  }),
-  artisan: one(users, {
-    fields: [inquiries.artisanId],
-    references: [users.id],
-  }),
-}));
-
-export const favoritesRelations = relations(favorites, ({ one }) => ({
-  user: one(users, {
-    fields: [favorites.userId],
-    references: [users.id],
-  }),
-  product: one(products, {
-    fields: [favorites.productId],
-    references: [products.id],
-  }),
-}));
-
-export const reviewsRelations = relations(reviews, ({ one }) => ({
-  product: one(products, {
-    fields: [reviews.productId],
-    references: [products.id],
-  }),
-  buyer: one(users, {
-    fields: [reviews.buyerId],
-    references: [users.id],
-  }),
-  artisan: one(users, {
-    fields: [reviews.artisanId],
-    references: [users.id],
-  }),
-}));
-
-// Insert schemas
-export const insertCategorySchema = createInsertSchema(categories).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertInquirySchema = createInsertSchema(inquiries).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertFavoriteSchema = createInsertSchema(favorites).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertReviewSchema = createInsertSchema(reviews).omit({
-  id: true,
-  createdAt: true,
-});
-
-// Types
-export type UpsertUser = typeof users.$inferInsert;
-export type User = typeof users.$inferSelect;
-export type Category = typeof categories.$inferSelect;
+// Legacy type aliases for compatibility
+export type UpsertUser = Partial<User> & { id: string };
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
-export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
-export type Inquiry = typeof inquiries.$inferSelect;
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
-export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
-export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;

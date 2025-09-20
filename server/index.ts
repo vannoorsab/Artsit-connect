@@ -1,10 +1,32 @@
+import dotenv from "dotenv";
+dotenv.config();
+
+console.log("Loading server modules...");
+
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes } from "./routes-minimal";
 import { setupVite, serveStatic, log } from "./vite";
+
+console.log("Modules loaded successfully");
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Simple cookie parser middleware
+app.use((req: any, _res, next) => {
+  const cookies: Record<string, string> = {};
+  if (req.headers.cookie) {
+    req.headers.cookie.split(';').forEach((cookie: string) => {
+      const [name, value] = cookie.trim().split('=');
+      if (name && value) {
+        cookies[name] = decodeURIComponent(value);
+      }
+    });
+  }
+  req.cookies = cookies;
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -37,7 +59,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  const server = registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -60,12 +82,10 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+  const PORT = parseInt(process.env.PORT || "3001", 10);
+  const HOST = "127.0.0.1"; // or "localhost"
+
+  server.listen(PORT, HOST, () => {
+    log(`serving on port ${PORT}`);
   });
 })();

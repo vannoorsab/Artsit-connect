@@ -1,227 +1,386 @@
-import {
-  users,
-  categories,
-  products,
-  inquiries,
-  favorites,
-  reviews,
-  type User,
-  type UpsertUser,
-  type Category,
-  type InsertCategory,
-  type Product,
-  type InsertProduct,
-  type Inquiry,
-  type InsertInquiry,
-  type Favorite,
-  type InsertFavorite,
-  type Review,
-  type InsertReview,
-} from "@shared/schema";
-import { db } from "./db";
-import { eq, desc, and, ilike, sql } from "drizzle-orm";
+import { adminDb } from "./firebase";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 
-export interface IStorage {
-  // User operations (IMPORTANT for Replit Auth)
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  
-  // Category operations
-  getCategories(): Promise<Category[]>;
-  createCategory(category: InsertCategory): Promise<Category>;
-  
-  // Product operations
-  getProducts(filters?: { categoryId?: string; search?: string; artisanId?: string }): Promise<Product[]>;
-  getProduct(id: string): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
-  updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product>;
-  deleteProduct(id: string): Promise<void>;
-  
-  // Inquiry operations
-  getInquiries(userId: string): Promise<Inquiry[]>;
-  createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
-  updateInquiryStatus(id: string, status: string): Promise<Inquiry>;
-  
-  // Favorite operations
-  getFavorites(userId: string): Promise<Product[]>;
-  addFavorite(favorite: InsertFavorite): Promise<Favorite>;
-  removeFavorite(userId: string, productId: string): Promise<void>;
-  
-  // Review operations
-  getReviews(productId: string): Promise<Review[]>;
-  createReview(review: InsertReview): Promise<Review>;
-  
-  // Analytics
-  getArtisanStats(artisanId: string): Promise<{
-    totalProducts: number;
-    totalInquiries: number;
-    averageRating: number;
-    totalReviews: number;
-  }>;
+// Firebase collection names
+const COLLECTIONS = {
+  USERS: 'users',
+  CATEGORIES: 'categories',
+  PRODUCTS: 'products',
+  INQUIRIES: 'inquiries',
+  FAVORITES: 'favorites',
+  REVIEWS: 'reviews'
+};
+
+// Type definitions for Firebase documents
+export interface User {
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  bio?: string;
+  location?: string;
+  isVerified?: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User operations (IMPORTANT for Replit Auth)
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: Timestamp;
+}
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
+export interface Product {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  categoryId: string;
+  artisanId: string;
+  images: string[];
+  materials?: string;
+  dimensions?: string;
+  careInstructions?: string;
+  isActive: boolean;
+  aiEnhanced?: boolean;
+  aiPricingSuggested?: boolean;
+  seoTitle?: string;
+  marketingCaption?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Inquiry {
+  id: string;
+  productId: string;
+  artisanId: string;
+  buyerId: string;
+  message: string;
+  status: 'pending' | 'responded' | 'closed';
+  createdAt: Timestamp;
+}
+
+export interface Favorite {
+  id: string;
+  userId: string;
+  productId: string;
+  createdAt: Timestamp;
+}
+
+export interface Review {
+  id: string;
+  productId: string;
+  buyerId: string;
+  artisanId: string;
+  rating: number;
+  comment?: string;
+  createdAt: Timestamp;
+}
+
+export const storage = {
+  // User operations
+  async getUser(id: string): Promise<User | null> {
+    try {
+      const userDoc = await adminDb.collection(COLLECTIONS.USERS).doc(id).get();
+      if (!userDoc.exists) {
+        return null;
+      }
+      return { id: userDoc.id, ...userDoc.data() } as User;
+    } catch (error) {
+      console.error("Error getting user:", error);
+      throw error;
+    }
+  },
+
+  async upsertUser(userData: Partial<User> & { id: string }): Promise<User> {
+    try {
+      const userRef = adminDb.collection(COLLECTIONS.USERS).doc(userData.id);
+      const now = Timestamp.now();
+
+      const userDoc = await userRef.get();
+      const data = {
+        ...userData,
+        updatedAt: now,
+        ...(userDoc.exists ? {} : { createdAt: now })
+      };
+
+      await userRef.set(data, { merge: true });
+      return { id: userData.id, ...data } as User;
+    } catch (error) {
+      console.error("Error upserting user:", error);
+      throw error;
+    }
+  },
 
   // Category operations
   async getCategories(): Promise<Category[]> {
-    return db.select().from(categories).orderBy(categories.name);
-  }
+    try {
+      const snapshot = await adminDb.collection(COLLECTIONS.CATEGORIES).orderBy('name').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+    } catch (error) {
+      console.error("Error getting categories:", error);
+      throw error;
+    }
+  },
 
-  async createCategory(category: InsertCategory): Promise<Category> {
-    const [newCategory] = await db.insert(categories).values(category).returning();
-    return newCategory;
-  }
+  async createCategory(categoryData: { name: string; description?: string }): Promise<Category> {
+    try {
+      const data = {
+        ...categoryData,
+        createdAt: Timestamp.now()
+      };
+      const docRef = await adminDb.collection(COLLECTIONS.CATEGORIES).add(data);
+      return { id: docRef.id, ...data } as Category;
+    } catch (error) {
+      console.error("Error creating category:", error);
+      throw error;
+    }
+  },
 
   // Product operations
-  async getProducts(filters?: { categoryId?: string; search?: string; artisanId?: string }): Promise<Product[]> {
-    const conditions = [eq(products.isActive, true)];
-    
-    if (filters?.categoryId) {
-      conditions.push(eq(products.categoryId, filters.categoryId));
-    }
-    
-    if (filters?.search) {
-      conditions.push(ilike(products.title, `%${filters.search}%`));
-    }
-    
-    if (filters?.artisanId) {
-      conditions.push(eq(products.artisanId, filters.artisanId));
-    }
-    
-    return db.select().from(products)
-      .where(and(...conditions))
-      .orderBy(desc(products.createdAt));
-  }
+  async getProducts(filters: {
+    categoryId?: string;
+    search?: string;
+    artisanId?: string;
+  }): Promise<Product[]> {
+    try {
+      let query = adminDb.collection(COLLECTIONS.PRODUCTS)
+        .where('isActive', '==', true)
+        .orderBy('createdAt', 'desc');
 
-  async getProduct(id: string): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    return product;
-  }
+      // Note: Firebase doesn't support multiple where clauses with different fields efficiently
+      // We'll filter in memory for now, but for production you might want to use composite indexes
+      const snapshot = await query.get();
+      let products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 
-  async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
-    return newProduct;
-  }
+      // Apply filters
+      if (filters.categoryId) {
+        products = products.filter(p => p.categoryId === filters.categoryId);
+      }
+      if (filters.artisanId) {
+        products = products.filter(p => p.artisanId === filters.artisanId);
+      }
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        products = products.filter(p =>
+          p.title.toLowerCase().includes(searchLower) ||
+          p.description.toLowerCase().includes(searchLower)
+        );
+      }
 
-  async updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product> {
-    const [updatedProduct] = await db
-      .update(products)
-      .set({ ...product, updatedAt: new Date() })
-      .where(eq(products.id, id))
-      .returning();
-    return updatedProduct;
-  }
+      return products;
+    } catch (error) {
+      console.error("Error getting products:", error);
+      throw error;
+    }
+  },
+
+  async getProduct(id: string): Promise<Product | null> {
+    try {
+      const productDoc = await adminDb.collection(COLLECTIONS.PRODUCTS).doc(id).get();
+      if (!productDoc.exists) {
+        return null;
+      }
+      return { id: productDoc.id, ...productDoc.data() } as Product;
+    } catch (error) {
+      console.error("Error getting product:", error);
+      throw error;
+    }
+  },
+
+  async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
+    try {
+      const now = Timestamp.now();
+      const data = {
+        ...productData,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now
+      };
+      const docRef = await adminDb.collection(COLLECTIONS.PRODUCTS).add(data);
+      return { id: docRef.id, ...data } as Product;
+    } catch (error) {
+      console.error("Error creating product:", error);
+      throw error;
+    }
+  },
+
+  async updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
+    try {
+      const productRef = adminDb.collection(COLLECTIONS.PRODUCTS).doc(id);
+      const updateData = {
+        ...updates,
+        updatedAt: Timestamp.now()
+      };
+      await productRef.update(updateData);
+
+      const updatedDoc = await productRef.get();
+      return { id: updatedDoc.id, ...updatedDoc.data() } as Product;
+    } catch (error) {
+      console.error("Error updating product:", error);
+      throw error;
+    }
+  },
 
   async deleteProduct(id: string): Promise<void> {
-    await db.update(products).set({ isActive: false }).where(eq(products.id, id));
-  }
+    try {
+      const productRef = adminDb.collection(COLLECTIONS.PRODUCTS).doc(id);
+      await productRef.update({
+        isActive: false,
+        updatedAt: Timestamp.now()
+      });
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      throw error;
+    }
+  },
 
   // Inquiry operations
-  async getInquiries(userId: string): Promise<Inquiry[]> {
-    return db.select().from(inquiries)
-      .where(eq(inquiries.artisanId, userId))
-      .orderBy(desc(inquiries.createdAt));
-  }
+  async getInquiries(artisanId: string): Promise<Inquiry[]> {
+    try {
+      const snapshot = await adminDb.collection(COLLECTIONS.INQUIRIES)
+        .where('artisanId', '==', artisanId)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Inquiry));
+    } catch (error) {
+      console.error("Error getting inquiries:", error);
+      throw error;
+    }
+  },
 
-  async createInquiry(inquiry: InsertInquiry): Promise<Inquiry> {
-    const [newInquiry] = await db.insert(inquiries).values(inquiry).returning();
-    return newInquiry;
-  }
+  async createInquiry(inquiryData: Omit<Inquiry, 'id' | 'createdAt'>): Promise<Inquiry> {
+    try {
+      const data = {
+        ...inquiryData,
+        status: 'pending' as const,
+        createdAt: Timestamp.now()
+      };
+      const docRef = await adminDb.collection(COLLECTIONS.INQUIRIES).add(data);
+      return { id: docRef.id, ...data } as Inquiry;
+    } catch (error) {
+      console.error("Error creating inquiry:", error);
+      throw error;
+    }
+  },
 
-  async updateInquiryStatus(id: string, status: string): Promise<Inquiry> {
-    const [updatedInquiry] = await db
-      .update(inquiries)
-      .set({ status })
-      .where(eq(inquiries.id, id))
-      .returning();
-    return updatedInquiry;
-  }
+  // Favorites operations
+  async getFavorites(userId: string): Promise<Favorite[]> {
+    try {
+      const snapshot = await adminDb.collection(COLLECTIONS.FAVORITES)
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Favorite));
+    } catch (error) {
+      console.error("Error getting favorites:", error);
+      throw error;
+    }
+  },
 
-  // Favorite operations
-  async getFavorites(userId: string): Promise<Product[]> {
-    const favoriteProducts = await db
-      .select()
-      .from(favorites)
-      .innerJoin(products, eq(favorites.productId, products.id))
-      .where(eq(favorites.userId, userId));
-    
-    return favoriteProducts.map(fp => fp.products);
-  }
-
-  async addFavorite(favorite: InsertFavorite): Promise<Favorite> {
-    const [newFavorite] = await db.insert(favorites).values(favorite).returning();
-    return newFavorite;
-  }
+  async addFavorite(favoriteData: { userId: string; productId: string }): Promise<Favorite> {
+    try {
+      const data = {
+        ...favoriteData,
+        createdAt: Timestamp.now()
+      };
+      const docRef = await adminDb.collection(COLLECTIONS.FAVORITES).add(data);
+      return { id: docRef.id, ...data } as Favorite;
+    } catch (error) {
+      console.error("Error adding favorite:", error);
+      throw error;
+    }
+  },
 
   async removeFavorite(userId: string, productId: string): Promise<void> {
-    await db.delete(favorites)
-      .where(and(eq(favorites.userId, userId), eq(favorites.productId, productId)));
-  }
+    try {
+      const snapshot = await adminDb.collection(COLLECTIONS.FAVORITES)
+        .where('userId', '==', userId)
+        .where('productId', '==', productId)
+        .get();
 
-  // Review operations
+      const deletePromises = snapshot.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletePromises);
+    } catch (error) {
+      console.error("Error removing favorite:", error);
+      throw error;
+    }
+  },
+
+  // Reviews operations
   async getReviews(productId: string): Promise<Review[]> {
-    return db.select().from(reviews)
-      .where(eq(reviews.productId, productId))
-      .orderBy(desc(reviews.createdAt));
-  }
+    try {
+      const snapshot = await adminDb.collection(COLLECTIONS.REVIEWS)
+        .where('productId', '==', productId)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
+    } catch (error) {
+      console.error("Error getting reviews:", error);
+      throw error;
+    }
+  },
 
-  async createReview(review: InsertReview): Promise<Review> {
-    const [newReview] = await db.insert(reviews).values(review).returning();
-    return newReview;
-  }
+  async createReview(reviewData: Omit<Review, 'id' | 'createdAt'>): Promise<Review> {
+    try {
+      const data = {
+        ...reviewData,
+        createdAt: Timestamp.now()
+      };
+      const docRef = await adminDb.collection(COLLECTIONS.REVIEWS).add(data);
+      return { id: docRef.id, ...data } as Review;
+    } catch (error) {
+      console.error("Error creating review:", error);
+      throw error;
+    }
+  },
 
-  // Analytics
+  // Artisan stats
   async getArtisanStats(artisanId: string): Promise<{
     totalProducts: number;
-    totalInquiries: number;
-    averageRating: number;
     totalReviews: number;
+    averageRating: number;
+    totalInquiries: number;
   }> {
-    const totalProducts = await db
-      .select({ count: sql`count(*)` })
-      .from(products)
-      .where(and(eq(products.artisanId, artisanId), eq(products.isActive, true)));
+    try {
+      const [productsSnapshot, reviewsSnapshot, inquiriesSnapshot] = await Promise.all([
+        adminDb.collection(COLLECTIONS.PRODUCTS)
+          .where('artisanId', '==', artisanId)
+          .where('isActive', '==', true)
+          .get(),
+        adminDb.collection(COLLECTIONS.REVIEWS)
+          .where('artisanId', '==', artisanId)
+          .get(),
+        adminDb.collection(COLLECTIONS.INQUIRIES)
+          .where('artisanId', '==', artisanId)
+          .get()
+      ]);
 
-    const totalInquiries = await db
-      .select({ count: sql`count(*)` })
-      .from(inquiries)
-      .where(eq(inquiries.artisanId, artisanId));
+      const totalProducts = productsSnapshot.size;
+      const totalReviews = reviewsSnapshot.size;
+      const totalInquiries = inquiriesSnapshot.size;
 
-    const reviewStats = await db
-      .select({
-        avgRating: sql`avg(${reviews.rating})`,
-        count: sql`count(*)`
-      })
-      .from(reviews)
-      .where(eq(reviews.artisanId, artisanId));
+      // Calculate average rating
+      let averageRating = 0;
+      if (totalReviews > 0) {
+        const totalRating = reviewsSnapshot.docs.reduce((sum, doc) => {
+          const review = doc.data() as Review;
+          return sum + review.rating;
+        }, 0);
+        averageRating = totalRating / totalReviews;
+      }
 
-    return {
-      totalProducts: Number(totalProducts[0]?.count || 0),
-      totalInquiries: Number(totalInquiries[0]?.count || 0),
-      averageRating: Number(reviewStats[0]?.avgRating || 0),
-      totalReviews: Number(reviewStats[0]?.count || 0),
-    };
-  }
-}
-
-export const storage = new DatabaseStorage();
+      return {
+        totalProducts,
+        totalReviews,
+        averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+        totalInquiries,
+      };
+    } catch (error) {
+      console.error("Error getting artisan stats:", error);
+      throw error;
+    }
+  },
+};
