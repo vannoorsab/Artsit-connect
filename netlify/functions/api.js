@@ -1,28 +1,26 @@
-const express = require('express');
-const serverless = require('serverless-http');
-const cors = require('cors');
-const cookieParser = require('cookie-parser');
+// Native Netlify Function for ArtisanConnect API
+const setCorsHeaders = (origin) => ({
+  'Access-Control-Allow-Origin': origin || '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Expose-Headers': 'Set-Cookie'
+});
 
-// Import your existing routes
-const app = express();
+const parseCookies = (cookieHeader) => {
+  const cookies = {};
+  if (cookieHeader) {
+    cookieHeader.split(';').forEach(cookie => {
+      const [name, value] = cookie.trim().split('=');
+      if (name && value) {
+        cookies[name] = decodeURIComponent(value);
+      }
+    });
+  }
+  return cookies;
+};
 
-// Middleware - Enhanced CORS for Netlify
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    // Allow all origins for demo purposes
-    return callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-  exposedHeaders: ['Set-Cookie']
-}));
-app.use(express.json());
-app.use(cookieParser());
-
-// Demo data - same as your existing server
+// Demo data
 const categories = [
   { id: '1', name: 'Pottery', description: 'Handcrafted ceramic pieces' },
   { id: '2', name: 'Textiles', description: 'Woven fabrics and clothing' },
@@ -37,11 +35,11 @@ const categories = [
 const products = [
   {
     id: '1',
-    title: 'Handcrafted Ceramic Vase',
-    description: 'Beautiful blue and white ceramic vase with intricate patterns, perfect for home decoration.',
+    title: 'Handwoven Silk Scarf',
+    description: 'Beautiful handwoven silk scarf with traditional patterns.',
     price: '89.99',
-    images: ['https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
-    categoryId: '1',
+    images: ['https://images.unsplash.com/photo-1601924994987-69e26d50dc26?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
+    categoryId: '2',
     artisanId: 'artisan1',
     aiEnhanced: true,
     createdAt: new Date().toISOString(),
@@ -49,11 +47,11 @@ const products = [
   },
   {
     id: '2',
-    title: 'Woven Cotton Scarf',
-    description: 'Soft, handwoven cotton scarf with traditional patterns in vibrant colors.',
-    price: '45.00',
-    images: ['https://images.unsplash.com/photo-1601924994987-69e26d50dc26?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
-    categoryId: '2',
+    title: 'Ceramic Tea Set',
+    description: 'Handcrafted ceramic tea set with intricate blue patterns.',
+    price: '149.99',
+    images: ['https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
+    categoryId: '1',
     artisanId: 'artisan2',
     aiEnhanced: false,
     createdAt: new Date().toISOString(),
@@ -61,9 +59,9 @@ const products = [
   },
   {
     id: '3',
-    title: 'Silver Wire Bracelet',
-    description: 'Elegant handmade silver wire bracelet with delicate beadwork.',
-    price: '67.50',
+    title: 'Silver Pendant Necklace',
+    description: 'Elegant silver pendant necklace with traditional engravings.',
+    price: '199.99',
     images: ['https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
     categoryId: '3',
     artisanId: 'artisan3',
@@ -73,10 +71,10 @@ const products = [
   },
   {
     id: '4',
-    title: 'Carved Wooden Bowl',
-    description: 'Beautiful hand-carved wooden bowl made from sustainable oak wood.',
-    price: '125.00',
-    images: ['https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
+    title: 'Wooden Cutting Board',
+    description: 'Premium wooden cutting board made from sustainable bamboo.',
+    price: '45.99',
+    images: ['https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
     categoryId: '4',
     artisanId: 'artisan4',
     aiEnhanced: false,
@@ -85,10 +83,10 @@ const products = [
   },
   {
     id: '5',
-    title: 'Copper Wind Chimes',
-    description: 'Melodious copper wind chimes with hand-forged details and beautiful sound.',
-    price: '78.00',
-    images: ['https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
+    title: 'Copper Bowl Set',
+    description: 'Set of three handforged copper bowls with hammered finish.',
+    price: '129.99',
+    images: ['https://images.unsplash.com/photo-1610701596007-11502861dcfa?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=600'],
     categoryId: '5',
     artisanId: 'artisan5',
     aiEnhanced: true,
@@ -109,7 +107,6 @@ const products = [
   }
 ];
 
-// Demo user for authentication
 const demoUser = {
   id: 'demo-user',
   email: 'demo@artisanconnect.com',
@@ -117,105 +114,203 @@ const demoUser = {
   lastName: 'User'
 };
 
-// Routes
-// Debug endpoint
-app.get('/debug', (req, res) => {
-  res.json({
-    message: 'API is working',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'unknown',
-    headers: req.headers,
-    cookies: req.cookies
-  });
-});
+// Main handler function
+exports.handler = async (event, context) => {
+  const { httpMethod, path, headers, body, queryStringParameters } = event;
+  const origin = headers.origin || headers.Origin;
+  const cookies = parseCookies(headers.cookie);
+  
+  console.log('API Request:', { httpMethod, path, origin });
 
-app.get('/categories', (req, res) => {
+  // Handle CORS preflight
+  if (httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: setCorsHeaders(origin),
+      body: ''
+    };
+  }
+
   try {
-    res.json(categories);
-  } catch (error) {
-    console.error('Categories error:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
-  }
-});
-
-app.get('/products', (req, res) => {
-  try {
-    console.log('Products endpoint called, returning', products.length, 'products');
-    res.json(products);
-  } catch (error) {
-    console.error('Products error:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
-  }
-});
-
-app.get('/products/:id', (req, res) => {
-  const product = products.find(p => p.id === req.params.id);
-  if (!product) {
-    return res.status(404).json({ message: 'Product not found' });
-  }
-  res.json(product);
-});
-
-// Auth routes
-app.get('/auth/user', (req, res) => {
-  const authToken = req.headers.authorization || req.cookies?.auth_token;
-  if (!authToken) {
-    return res.status(401).json({ message: 'Not authenticated' });
-  }
-  res.json(demoUser);
-});
-
-app.post('/auth/login', (req, res) => {
-  try {
-    console.log('Login attempt:', { body: req.body, headers: req.headers });
-    const { email, password } = req.body;
-
-    // For demo purposes, accept any email/password combination
-    if (!email || !password) {
-      console.log('Login failed: missing credentials');
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+    // Parse request body for POST requests
+    let requestBody = {};
+    if (body) {
+      try {
+        requestBody = JSON.parse(body);
+      } catch (e) {
+        console.error('Failed to parse body:', e);
+      }
     }
 
-    console.log('Setting auth cookie for user:', email);
+    // Route handling
+    if (path === '/debug') {
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify({
+          message: 'API is working',
+          timestamp: new Date().toISOString(),
+          environment: process.env.NODE_ENV || 'unknown',
+          path,
+          method: httpMethod,
+          headers: headers
+        })
+      };
+    }
 
-    // Set cookie with proper settings for production
-    res.cookie('auth_token', 'demo-token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // Secure only in production
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
+    if (path === '/categories' && httpMethod === 'GET') {
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify(categories)
+      };
+    }
 
-    const response = {
-      success: true,
-      user: {
-        ...demoUser,
-        email: email // Use the provided email
+    if (path === '/products' && httpMethod === 'GET') {
+      console.log('Products endpoint called, returning', products.length, 'products');
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify(products)
+      };
+    }
+
+    if (path.startsWith('/products/') && httpMethod === 'GET') {
+      const productId = path.split('/')[2];
+      const product = products.find(p => p.id === productId);
+      
+      if (!product) {
+        return {
+          statusCode: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            ...setCorsHeaders(origin)
+          },
+          body: JSON.stringify({ message: 'Product not found' })
+        };
       }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify(product)
+      };
+    }
+
+    if (path === '/auth/user' && httpMethod === 'GET') {
+      const authToken = cookies.auth_token;
+      
+      if (!authToken) {
+        return {
+          statusCode: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...setCorsHeaders(origin)
+          },
+          body: JSON.stringify({ message: 'Not authenticated' })
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify(demoUser)
+      };
+    }
+
+    if (path === '/auth/login' && httpMethod === 'POST') {
+      const { email, password } = requestBody;
+      console.log('Login attempt:', { email, password: password ? '***' : undefined });
+
+      if (!email || !password) {
+        return {
+          statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            ...setCorsHeaders(origin)
+          },
+          body: JSON.stringify({
+            success: false,
+            message: 'Email and password are required'
+          })
+        };
+      }
+
+      // Create cookie header
+      const cookieValue = `auth_token=demo-token; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; SameSite=None' : 'SameSite=Lax'}; Max-Age=86400; Path=/`;
+
+      const response = {
+        success: true,
+        user: {
+          ...demoUser,
+          email: email
+        }
+      };
+
+      console.log('Login successful for:', email);
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': cookieValue,
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify(response)
+      };
+    }
+
+    if (path === '/auth/logout' && httpMethod === 'POST') {
+      const cookieValue = `auth_token=; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; SameSite=None' : 'SameSite=Lax'}; Max-Age=0; Path=/`;
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': cookieValue,
+          ...setCorsHeaders(origin)
+        },
+        body: JSON.stringify({ success: true })
+      };
+    }
+
+    // Route not found
+    return {
+      statusCode: 404,
+      headers: {
+        'Content-Type': 'application/json',
+        ...setCorsHeaders(origin)
+      },
+      body: JSON.stringify({ message: 'Route not found', path, method: httpMethod })
     };
 
-    console.log('Login successful, sending response:', response);
-    res.json(response);
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    console.error('API Error:', error);
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...setCorsHeaders(origin)
+      },
+      body: JSON.stringify({ 
+        error: 'Internal server error',
+        message: error.message 
+      })
+    };
   }
-});
-
-app.post('/auth/logout', (req, res) => {
-  res.clearCookie('auth_token', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none'
-  });
-  res.json({ success: true });
-});
-
-// Export the serverless function
-module.exports.handler = serverless(app);
+};
