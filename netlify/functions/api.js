@@ -6,10 +6,18 @@ import cookieParser from 'cookie-parser';
 // Import your existing routes
 const app = express();
 
-// Middleware
+// Middleware - Enhanced CORS for Netlify
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    // Allow all origins for demo purposes
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  exposedHeaders: ['Set-Cookie']
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -110,12 +118,34 @@ const demoUser = {
 };
 
 // Routes
+// Debug endpoint
+app.get('/debug', (req, res) => {
+  res.json({
+    message: 'API is working',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'unknown',
+    headers: req.headers,
+    cookies: req.cookies
+  });
+});
+
 app.get('/categories', (req, res) => {
-  res.json(categories);
+  try {
+    res.json(categories);
+  } catch (error) {
+    console.error('Categories error:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
 });
 
 app.get('/products', (req, res) => {
-  res.json(products);
+  try {
+    console.log('Products endpoint called, returning', products.length, 'products');
+    res.json(products);
+  } catch (error) {
+    console.error('Products error:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
 });
 
 app.get('/products/:id', (req, res) => {
@@ -136,31 +166,46 @@ app.get('/auth/user', (req, res) => {
 });
 
 app.post('/auth/login', (req, res) => {
-  const { email, password } = req.body;
+  try {
+    console.log('Login attempt:', { body: req.body, headers: req.headers });
+    const { email, password } = req.body;
 
-  // For demo purposes, accept any email/password combination
-  if (!email || !password) {
-    return res.status(400).json({
+    // For demo purposes, accept any email/password combination
+    if (!email || !password) {
+      console.log('Login failed: missing credentials');
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
+    console.log('Setting auth cookie for user:', email);
+
+    // Set cookie with proper settings for production
+    res.cookie('auth_token', 'demo-token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Secure only in production
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    const response = {
+      success: true,
+      user: {
+        ...demoUser,
+        email: email // Use the provided email
+      }
+    };
+
+    console.log('Login successful, sending response:', response);
+    res.json(response);
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Email and password are required'
+      message: 'Internal server error'
     });
   }
-
-  // Set cookie with proper settings for production
-  res.cookie('auth_token', 'demo-token', {
-    httpOnly: true,
-    secure: true, // Always secure for production
-    sameSite: 'none', // Required for cross-origin cookies
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  });
-
-  res.json({
-    success: true,
-    user: {
-      ...demoUser,
-      email: email // Use the provided email
-    }
-  });
 });
 
 app.post('/auth/logout', (req, res) => {
