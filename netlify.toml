@@ -1,6 +1,6 @@
 [build]
   publish = "dist/public"
-  command = "npm run build"
+  command = "npm run build && cd netlify/functions && npm install"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -19,3 +19,4 @@
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"

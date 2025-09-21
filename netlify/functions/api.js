@@ -1,7 +1,7 @@
-import express from 'express';
-import serverless from 'serverless-http';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
+const express = require('express');
+const serverless = require('serverless-http');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 
 // Import your existing routes
 const app = express();
@@ -218,4 +218,4 @@ app.post('/auth/logout', (req, res) => {
 });
 
 // Export the serverless function
-export const handler = serverless(app);
+module.exports.handler = serverless(app);
